@@ -22,10 +22,23 @@ This example includes:
 ### 1. Set Environment Variables
 
 ```bash
-# Create .env file
+# Copy the example environment file
+cp .env.example .env
+
+# Edit .env and set your values:
+# - ANTHROPIC_API_KEY: Your Anthropic API key
+# - JWT_SECRET: Generate with: openssl rand -hex 32
+# - POSTGRES_PASSWORD: Generate with: openssl rand -hex 32
+# - REDIS_PASSWORD: Generate with: openssl rand -hex 32
+# - GRAFANA_PASSWORD: Choose a password for Grafana admin
+
+# Quick setup (generates random passwords):
 cat > .env << EOF
 ANTHROPIC_API_KEY=your-api-key-here
 JWT_SECRET=$(openssl rand -hex 32)
+POSTGRES_PASSWORD=$(openssl rand -hex 32)
+REDIS_PASSWORD=$(openssl rand -hex 32)
+GRAFANA_PASSWORD=$(openssl rand -hex 16)
 EOF
 ```
 
@@ -41,7 +54,7 @@ docker-compose up -d
 |---------|-----|-------------|
 | API Gateway | http://localhost:8080 | - |
 | Demo UI | http://localhost:3000 | - |
-| Grafana | http://localhost:3001 | admin/admin |
+| Grafana | http://localhost:3001 | admin / (GRAFANA_PASSWORD from .env) |
 | Prometheus | http://localhost:9090 | - |
 | Jaeger | http://localhost:16686 | - |
 
@@ -213,13 +226,13 @@ docker-compose logs orchestrator
 **Database connection errors:**
 ```bash
 # Verify PostgreSQL is ready
-docker-compose exec postgres pg_isready -U aiplatform
+docker-compose exec postgres pg_isready -U ${POSTGRES_USER:-aiplatform}
 ```
 
 **Redis connection errors:**
 ```bash
-# Test Redis connection
-docker-compose exec redis redis-cli -a aiplatform ping
+# Test Redis connection (use password from .env)
+docker-compose exec redis redis-cli -a $REDIS_PASSWORD ping
 ```
 
 ### Reset Everything

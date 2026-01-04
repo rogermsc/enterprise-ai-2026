@@ -31,8 +31,9 @@ This platform provides everything needed to deploy AI agents in production:
 git clone https://github.com/rogermsc/enterprise-ai-2026
 cd enterprise-ai-2026/examples/customer-support-agent
 
-# Set your API key
-export ANTHROPIC_API_KEY=your-key-here
+# Create .env file with required secrets
+cp .env.example .env
+# Edit .env and add your ANTHROPIC_API_KEY and generate passwords
 
 # Start the stack
 docker-compose up -d
@@ -46,7 +47,7 @@ curl -X POST http://localhost:8080/api/v1/agents/a1b2c3d4-e5f6-7890-abcd-ef12345
 **Access the services:**
 - API: http://localhost:8080
 - Demo UI: http://localhost:3000
-- Grafana: http://localhost:3001 (admin/admin)
+- Grafana: http://localhost:3001
 - Jaeger: http://localhost:16686
 
 ## Architecture

@@ -42,3 +42,14 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# Environment files (contain secrets)
+.env
+.env.local
+.env.*.local
+*.env
+
+# Terraform state (contains secrets)
+*.tfstate
+*.tfstate.*
+.terraform/
