@@ -1,0 +1,163 @@
+version: "3.9"
+
+services:
+  # =============================================================================
+  # Core Platform Services
+  # =============================================================================
+
+  gateway:
+    build:
+      context: ../../platform
+      dockerfile: Dockerfile
+      target: gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=postgresql://aiplatform:aiplatform@postgres:5432/aiplatform
+      - REDIS_URL=redis://:aiplatform@redis:6379/0
+      - JWT_SECRET=${JWT_SECRET:-development-secret-change-in-production}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - LOG_LEVEL=INFO
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ai-platform
+
+  orchestrator:
+    build:
+      context: ../../platform
+      dockerfile: Dockerfile
+      target: orchestrator
+    environment:
+      - DATABASE_URL=postgresql://aiplatform:aiplatform@postgres:5432/aiplatform
+      - REDIS_URL=redis://:aiplatform@redis:6379/0
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - LOG_LEVEL=INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ai-platform
+
+  # =============================================================================
+  # Data Services
+  # =============================================================================
+
+  postgres:
+    image: pgvector/pgvector:pg15
+    environment:
+      - POSTGRES_USER=aiplatform
+      - POSTGRES_PASSWORD=aiplatform
+      - POSTGRES_DB=aiplatform
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aiplatform -d aiplatform"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ai-platform
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --requirepass aiplatform --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "aiplatform", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ai-platform
+
+  # =============================================================================
+  # Observability Stack
+  # =============================================================================
+
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./observability/alerts.yml:/etc/prometheus/alerts.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    networks:
+      - ai-platform
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - ai-platform
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.52
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16686:16686"  # UI
+      - "4317:4317"    # OTLP gRPC
+      - "4318:4318"    # OTLP HTTP
+    networks:
+      - ai-platform
+
+  # =============================================================================
+  # Demo UI
+  # =============================================================================
+
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
+    depends_on:
+      - gateway
+    networks:
+      - ai-platform
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  ai-platform:
+    driver: bridge

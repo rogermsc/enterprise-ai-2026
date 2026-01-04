@@ -1,0 +1,237 @@
+version: "3.9"
+
+# =============================================================================
+# Production Docker Compose Configuration
+# =============================================================================
+#
+# This configuration is designed for production-like deployments.
+# For actual production, use Kubernetes with the Helm chart.
+#
+# Usage:
+#   docker-compose -f docker-compose.production.yml up -d
+#
+# =============================================================================
+
+x-common-env: &common-env
+  DATABASE_URL: ${DATABASE_URL}
+  REDIS_URL: ${REDIS_URL}
+  JWT_SECRET: ${JWT_SECRET}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+
+x-healthcheck: &healthcheck
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 30s
+
+x-resource-limits: &resource-limits
+  cpus: '1.0'
+  memory: 1G
+
+services:
+  # ===========================================================================
+  # Load Balancer
+  # ===========================================================================
+
+  traefik:
+    image: traefik:v3.0
+    command:
+      - "--api.insecure=false"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--metrics.prometheus=true"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - letsencrypt:/letsencrypt
+    networks:
+      - ai-platform
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+  # ===========================================================================
+  # Gateway Service
+  # ===========================================================================
+
+  gateway:
+    image: ${IMAGE_REGISTRY}/ai-platform-gateway:${IMAGE_TAG:-latest}
+    environment:
+      <<: *common-env
+      CORS_ORIGINS: ${CORS_ORIGINS}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.gateway.rule=Host(`${API_DOMAIN}`)"
+      - "traefik.http.routers.gateway.entrypoints=websecure"
+      - "traefik.http.routers.gateway.tls.certresolver=letsencrypt"
+      - "traefik.http.services.gateway.loadbalancer.server.port=8080"
+      - "traefik.http.middlewares.ratelimit.ratelimit.average=100"
+      - "traefik.http.middlewares.ratelimit.ratelimit.burst=50"
+      - "traefik.http.routers.gateway.middlewares=ratelimit"
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+    deploy:
+      mode: replicated
+      replicas: 3
+      resources:
+        limits:
+          <<: *resource-limits
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        delay: 10s
+    networks:
+      - ai-platform
+
+  # ===========================================================================
+  # Orchestrator Service
+  # ===========================================================================
+
+  orchestrator:
+    image: ${IMAGE_REGISTRY}/ai-platform-orchestrator:${IMAGE_TAG:-latest}
+    environment:
+      <<: *common-env
+      MAX_ITERATIONS: ${MAX_ITERATIONS:-10}
+      EXECUTION_TIMEOUT: ${EXECUTION_TIMEOUT:-300}
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+    deploy:
+      mode: replicated
+      replicas: 3
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+      update_config:
+        parallelism: 1
+        delay: 10s
+    networks:
+      - ai-platform
+
+  # ===========================================================================
+  # Policy Engine Service
+  # ===========================================================================
+
+  policy:
+    image: ${IMAGE_REGISTRY}/ai-platform-policy:${IMAGE_TAG:-latest}
+    environment:
+      <<: *common-env
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+    deploy:
+      mode: replicated
+      replicas: 2
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - ai-platform
+
+  # ===========================================================================
+  # Memory Service
+  # ===========================================================================
+
+  memory:
+    image: ${IMAGE_REGISTRY}/ai-platform-memory:${IMAGE_TAG:-latest}
+    environment:
+      <<: *common-env
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "curl", "-f", "http://localhost:8083/health"]
+    deploy:
+      mode: replicated
+      replicas: 2
+      resources:
+        limits:
+          <<: *resource-limits
+    networks:
+      - ai-platform
+
+  # ===========================================================================
+  # Observability
+  # ===========================================================================
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.91.0
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - ai-platform
+
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+    networks:
+      - ai-platform
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=https://${GRAFANA_DOMAIN}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`${GRAFANA_DOMAIN}`)"
+      - "traefik.http.routers.grafana.entrypoints=websecure"
+      - "traefik.http.routers.grafana.tls.certresolver=letsencrypt"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - ai-platform
+
+volumes:
+  letsencrypt:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  ai-platform:
+    driver: overlay
+    attachable: true

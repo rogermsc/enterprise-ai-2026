@@ -1,0 +1,247 @@
+# =============================================================================
+# AI Platform Helm Chart Values
+# =============================================================================
+
+# Global settings
+global:
+  environment: production
+  imagePullSecrets: []
+
+# -----------------------------------------------------------------------------
+# Gateway Configuration
+# -----------------------------------------------------------------------------
+gateway:
+  enabled: true
+  replicaCount: 3
+
+  image:
+    repository: ai-platform/gateway
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8080
+
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    hosts:
+      - host: api.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: api-tls
+        hosts:
+          - api.example.com
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 70
+
+  env:
+    LOG_LEVEL: INFO
+    CORS_ORIGINS: "https://app.example.com"
+
+  secrets:
+    # Reference to external secret (AWS Secrets Manager, Vault, etc.)
+    externalSecret:
+      enabled: true
+      secretStore: aws-secrets-manager
+      remoteRef: ai-platform/prod/config
+
+# -----------------------------------------------------------------------------
+# Orchestrator Configuration
+# -----------------------------------------------------------------------------
+orchestrator:
+  enabled: true
+  replicaCount: 3
+
+  image:
+    repository: ai-platform/orchestrator
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 70
+
+  env:
+    LOG_LEVEL: INFO
+    MAX_ITERATIONS: "10"
+    EXECUTION_TIMEOUT: "300"
+
+# -----------------------------------------------------------------------------
+# Policy Engine Configuration
+# -----------------------------------------------------------------------------
+policy:
+  enabled: true
+  replicaCount: 2
+
+  image:
+    repository: ai-platform/policy
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# -----------------------------------------------------------------------------
+# Memory Service Configuration
+# -----------------------------------------------------------------------------
+memory:
+  enabled: true
+  replicaCount: 2
+
+  image:
+    repository: ai-platform/memory
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# -----------------------------------------------------------------------------
+# Database (PostgreSQL) - Using Bitnami subchart
+# -----------------------------------------------------------------------------
+postgresql:
+  enabled: false  # Set to true for in-cluster PostgreSQL
+  auth:
+    postgresPassword: ""  # Set via --set
+    database: aiplatform
+  primary:
+    persistence:
+      size: 100Gi
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+
+# External PostgreSQL (when postgresql.enabled=false)
+externalPostgresql:
+  host: ""
+  port: 5432
+  database: aiplatform
+  existingSecret: ""
+  existingSecretPasswordKey: password
+
+# -----------------------------------------------------------------------------
+# Redis - Using Bitnami subchart
+# -----------------------------------------------------------------------------
+redis:
+  enabled: false  # Set to true for in-cluster Redis
+  auth:
+    password: ""  # Set via --set
+  master:
+    persistence:
+      size: 10Gi
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+
+# External Redis (when redis.enabled=false)
+externalRedis:
+  host: ""
+  port: 6379
+  existingSecret: ""
+  existingSecretPasswordKey: password
+
+# -----------------------------------------------------------------------------
+# Observability
+# -----------------------------------------------------------------------------
+observability:
+  prometheus:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      interval: 15s
+
+  tracing:
+    enabled: true
+    endpoint: http://jaeger-collector:4317
+
+# -----------------------------------------------------------------------------
+# Security
+# -----------------------------------------------------------------------------
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+networkPolicy:
+  enabled: true
+
+# -----------------------------------------------------------------------------
+# Service Account
+# -----------------------------------------------------------------------------
+serviceAccount:
+  create: true
+  annotations: {}
+  # AWS IRSA annotation:
+  # eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/ai-platform-role
+
+# -----------------------------------------------------------------------------
+# Pod Disruption Budget
+# -----------------------------------------------------------------------------
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# -----------------------------------------------------------------------------
+# Node Affinity
+# -----------------------------------------------------------------------------
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

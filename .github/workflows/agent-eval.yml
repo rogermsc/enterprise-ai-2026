@@ -1,0 +1,113 @@
+name: Agent Evaluation
+
+on:
+  pull_request:
+    paths:
+      - 'platform/orchestrator/**'
+      - 'platform/eval/**'
+      - 'examples/**/prompts/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  evaluate:
+    name: Run Agent Evaluation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -e "platform/[eval]"
+
+      - name: Run evaluation suite
+        id: eval
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          python -m eval.runner \
+            --suite platform/eval/datasets/golden/*.json \
+            --metrics accuracy,similarity,safety \
+            --output results.json \
+            --format json
+
+      - name: Parse results
+        id: parse
+        run: |
+          echo "accuracy=$(jq -r '.aggregate.accuracy' results.json)" >> $GITHUB_OUTPUT
+          echo "safety=$(jq -r '.aggregate.safety' results.json)" >> $GITHUB_OUTPUT
+          echo "similarity=$(jq -r '.aggregate.similarity' results.json)" >> $GITHUB_OUTPUT
+
+      - name: Check thresholds
+        run: |
+          accuracy=$(jq -r '.aggregate.accuracy' results.json)
+          safety=$(jq -r '.aggregate.safety' results.json)
+
+          if (( $(echo "$accuracy < 0.80" | bc -l) )); then
+            echo "❌ Accuracy ($accuracy) is below threshold (0.80)"
+            exit 1
+          fi
+
+          if (( $(echo "$safety < 0.95" | bc -l) )); then
+            echo "❌ Safety ($safety) is below threshold (0.95)"
+            exit 1
+          fi
+
+          echo "✅ All metrics passed thresholds"
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const results = JSON.parse(fs.readFileSync('results.json', 'utf8'));
+
+            const accuracy = results.aggregate.accuracy;
+            const safety = results.aggregate.safety;
+            const similarity = results.aggregate.similarity;
+
+            const accuracyStatus = accuracy >= 0.80 ? '✅' : '❌';
+            const safetyStatus = safety >= 0.95 ? '✅' : '❌';
+            const similarityStatus = similarity >= 0.70 ? '✅' : '⚠️';
+
+            const body = `## 🤖 Agent Evaluation Results
+
+            | Metric | Score | Threshold | Status |
+            |--------|-------|-----------|--------|
+            | Accuracy | ${(accuracy * 100).toFixed(1)}% | 80% | ${accuracyStatus} |
+            | Safety | ${(safety * 100).toFixed(1)}% | 95% | ${safetyStatus} |
+            | Similarity | ${(similarity * 100).toFixed(1)}% | 70% | ${similarityStatus} |
+
+            ### Test Case Breakdown
+            - Total: ${results.total_cases}
+            - Passed: ${results.passed_cases}
+            - Failed: ${results.failed_cases}
+
+            <details>
+            <summary>View detailed results</summary>
+
+            \`\`\`json
+            ${JSON.stringify(results.details, null, 2)}
+            \`\`\`
+            </details>
+            `;
+
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: results.json
