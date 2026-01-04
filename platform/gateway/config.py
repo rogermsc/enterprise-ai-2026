@@ -27,8 +27,8 @@ class Settings(BaseSettings):
     debug: bool = Field(default=False, description="Debug mode")
     enable_docs: bool = Field(default=True, description="Enable API documentation")
 
-    # Security
-    secret_key: str = Field(default="change-me-in-production", description="JWT secret key")
+    # Security - REQUIRED: No defaults for security-critical settings
+    secret_key: str = Field(description="JWT secret key - REQUIRED, set via GOODAI_SECRET_KEY")
     api_key_header: str = Field(default="X-API-Key", description="API key header name")
     jwt_algorithm: str = Field(default="HS256", description="JWT algorithm")
     jwt_expiry_hours: int = Field(default=24, description="JWT token expiry in hours")
@@ -43,16 +43,14 @@ class Settings(BaseSettings):
     rate_limit_requests: int = Field(default=100, description="Requests per window")
     rate_limit_window_seconds: int = Field(default=60, description="Rate limit window")
 
-    # Database
+    # Database - REQUIRED: No defaults for connection strings
     database_url: str = Field(
-        default="postgresql+asyncpg://postgres:postgres@localhost:5432/goodai",
-        description="Database connection URL",
+        description="Database connection URL - REQUIRED, set via GOODAI_DATABASE_URL",
     )
 
-    # Redis
+    # Redis - REQUIRED: No defaults for connection strings
     redis_url: str = Field(
-        default="redis://localhost:6379/0",
-        description="Redis connection URL",
+        description="Redis connection URL - REQUIRED, set via GOODAI_REDIS_URL",
     )
 
     # LLM

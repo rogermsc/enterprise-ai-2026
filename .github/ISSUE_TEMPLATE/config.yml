@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security Vulnerabilities
+    url: https://github.com/rogermsc/enterprise-ai-2026/security/policy
+    about: For critical security issues, please review our security policy
+  - name: Documentation
+    url: https://github.com/rogermsc/enterprise-ai-2026/tree/main/docs
+    about: Check our documentation before opening an issue
+  - name: Discussions
+    url: https://github.com/rogermsc/enterprise-ai-2026/discussions
+    about: Ask questions and discuss ideas

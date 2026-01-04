@@ -1,0 +1,37 @@
+# =============================================================================
+# CODEOWNERS - Define code ownership for automated review assignment
+# =============================================================================
+# Syntax: path pattern + @owner(s)
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owners for everything in the repo
+* @rogermsc
+
+# Platform core
+/platform/ @rogermsc
+/platform/gateway/ @rogermsc
+/platform/orchestrator/ @rogermsc
+/platform/policy/ @rogermsc
+/platform/memory/ @rogermsc
+/platform/eval/ @rogermsc
+
+# Infrastructure
+/infra/ @rogermsc
+/infra/terraform/ @rogermsc
+/infra/helm/ @rogermsc
+/infra/docker/ @rogermsc
+
+# Documentation
+/docs/ @rogermsc
+README.md @rogermsc
+
+# CI/CD
+/.github/ @rogermsc
+
+# Security-sensitive files require explicit approval
+/SECURITY.md @rogermsc
+/.github/workflows/ @rogermsc
+/infra/terraform/*.tf @rogermsc
+
+# CLI tool
+/src/ @rogermsc
