@@ -1,0 +1,15 @@
+{
+  "company_name": "FastFreight Logistics",
+  "industry": "Logistics & Transportation",
+  "employee_count": 12000,
+  "annual_revenue_usd": 850000000,
+  "cloud_provider": "Azure",
+  "cloud_monthly_spend_usd": 85000,
+  "has_data_lake": true,
+  "has_data_governance_policy": false,
+  "has_ml_platform": false,
+  "has_monitoring": false,
+  "ai_team_size": 8,
+  "ai_projects_in_production": 2,
+  "executive_sponsor": true
+}

@@ -1,0 +1,2 @@
+[console_scripts]
+goodai-assess = goodai_assess.cli:app

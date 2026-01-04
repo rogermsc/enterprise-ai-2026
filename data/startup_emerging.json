@@ -1,0 +1,15 @@
+{
+  "company_name": "DataStart AI",
+  "industry": "FinTech",
+  "employee_count": 45,
+  "annual_revenue_usd": 2500000,
+  "cloud_provider": "GCP",
+  "cloud_monthly_spend_usd": 3500,
+  "has_data_lake": false,
+  "has_data_governance_policy": false,
+  "has_ml_platform": false,
+  "has_monitoring": false,
+  "ai_team_size": 3,
+  "ai_projects_in_production": 0,
+  "executive_sponsor": false
+}

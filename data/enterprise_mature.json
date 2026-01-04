@@ -1,0 +1,15 @@
+{
+  "company_name": "TechCorp Global",
+  "industry": "Technology",
+  "employee_count": 8500,
+  "annual_revenue_usd": 2500000000,
+  "cloud_provider": "AWS",
+  "cloud_monthly_spend_usd": 450000,
+  "has_data_lake": true,
+  "has_data_governance_policy": true,
+  "has_ml_platform": true,
+  "has_monitoring": true,
+  "ai_team_size": 85,
+  "ai_projects_in_production": 12,
+  "executive_sponsor": true
+}
