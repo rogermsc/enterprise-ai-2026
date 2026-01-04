@@ -1,0 +1,18 @@
+{{- if .Values.observability.prometheus.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "ai-platform.fullname" . }}-gateway
+  labels:
+    {{- include "ai-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+spec:
+  selector:
+    matchLabels:
+      {{- include "ai-platform.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: gateway
+  endpoints:
+    - port: http
+      interval: {{ .Values.observability.prometheus.serviceMonitor.interval }}
+      path: /metrics
+{{- end }}
