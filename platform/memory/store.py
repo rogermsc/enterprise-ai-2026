@@ -36,7 +36,12 @@ class MemoryStore:
     - Cross-session retrieval
     """
 
-    def __init__(self, redis_url: str = "redis://localhost:6379/0"):
+    def __init__(self, redis_url: str | None = None):
+        if redis_url is None:
+            import os
+            redis_url = os.environ.get("REDIS_URL")
+            if not redis_url:
+                raise ValueError("REDIS_URL environment variable is required")
         self._redis_url = redis_url
         self._client = None  # Lazy initialization
         self._local_cache: dict[str, list[MemoryEntry]] = {}

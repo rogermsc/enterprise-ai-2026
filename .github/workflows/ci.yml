@@ -121,7 +121,7 @@ jobs:
           pip-audit --strict
 
       - name: Run Trivy (container scan)
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.18.0
         with:
           scan-type: 'fs'
           scan-ref: '.'

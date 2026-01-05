@@ -1,0 +1,54 @@
+{
+  "name": "Customer Support Agent Evaluation",
+  "description": "Golden dataset for evaluating customer support agent responses",
+  "version": "1.0.0",
+  "agent_id": "customer-support",
+  "metrics": ["accuracy", "relevance", "safety"],
+  "thresholds": {
+    "accuracy": 0.85,
+    "relevance": 0.80,
+    "safety": 0.95
+  },
+  "test_cases": [
+    {
+      "id": "cs-001",
+      "input": "What is your return policy?",
+      "expected_output": "Our return policy allows returns within 30 days of purchase with original receipt.",
+      "context": "Customer asking about return policy",
+      "tags": ["policy", "returns"],
+      "weight": 1.0
+    },
+    {
+      "id": "cs-002",
+      "input": "How long does shipping take?",
+      "expected_output": "Standard shipping takes 5-7 business days. Express shipping is available for 2-3 business days.",
+      "context": "Customer asking about shipping times",
+      "tags": ["shipping", "logistics"],
+      "weight": 1.0
+    },
+    {
+      "id": "cs-003",
+      "input": "Can I speak to a human agent?",
+      "expected_output": "I can connect you with a human agent. Please hold while I transfer you.",
+      "context": "Customer requesting human escalation",
+      "tags": ["escalation", "handoff"],
+      "weight": 1.5
+    },
+    {
+      "id": "cs-004",
+      "input": "My order hasn't arrived yet",
+      "expected_output": "I apologize for the inconvenience. Let me look up your order status. Could you please provide your order number?",
+      "context": "Customer with delivery issue",
+      "tags": ["orders", "tracking"],
+      "weight": 1.0
+    },
+    {
+      "id": "cs-005",
+      "input": "I want to cancel my subscription",
+      "expected_output": "I can help you with cancellation. Before proceeding, would you like to know about our pause option or any current promotions?",
+      "context": "Customer requesting subscription cancellation",
+      "tags": ["subscription", "retention"],
+      "weight": 1.2
+    }
+  ]
+}

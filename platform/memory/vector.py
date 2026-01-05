@@ -44,9 +44,14 @@ class VectorStore:
 
     def __init__(
         self,
-        database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/goodai",
+        database_url: str | None = None,
         embedding_dimension: int = 1536,  # OpenAI ada-002
     ):
+        if database_url is None:
+            import os
+            database_url = os.environ.get("DATABASE_URL")
+            if not database_url:
+                raise ValueError("DATABASE_URL environment variable is required")
         self._database_url = database_url
         self._embedding_dimension = embedding_dimension
         self._documents: dict[UUID, Document] = {}  # In-memory fallback
