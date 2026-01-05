@@ -14,11 +14,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from gateway.config import settings
-from gateway.middleware import AuditMiddleware, RateLimitMiddleware
+from gateway.middleware import AuditMiddleware, RateLimitMiddleware, SecurityHeadersMiddleware
 from gateway.routes import agents, health, tasks
 from gateway.telemetry import setup_telemetry
 
 logger = structlog.get_logger()
+
+__version__ = "0.1.0"
 
 
 @asynccontextmanager
@@ -55,6 +57,7 @@ def create_app() -> FastAPI:
     # Custom middleware
     app.add_middleware(AuditMiddleware)
     app.add_middleware(RateLimitMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware)
 
     # Register routes
     app.include_router(health.router, prefix="/health", tags=["Health"])
@@ -82,7 +85,6 @@ def create_app() -> FastAPI:
     return app
 
 
-__version__ = "0.1.0"
 app = create_app()
 
 

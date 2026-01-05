@@ -6,21 +6,14 @@ Supports declarative policies with audit logging.
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from enum import Enum
 from typing import Any, Optional
 
 import structlog
 
+from policy.types import Decision
 from policy.rules import Rule, RuleSet
 
 logger = structlog.get_logger()
-
-
-class Decision(str, Enum):
-    """Policy decision outcome."""
-    ALLOW = "allow"
-    DENY = "deny"
-    REQUIRE_APPROVAL = "require_approval"
 
 
 @dataclass

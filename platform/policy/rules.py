@@ -6,7 +6,7 @@ Declarative rule structures for the policy engine.
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from policy.engine import Decision
+from policy.types import Decision
 
 
 @dataclass
