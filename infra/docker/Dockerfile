@@ -82,6 +82,9 @@ USER appuser
 
 EXPOSE 8081
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import socket; s=socket.socket(); s.connect(('localhost', 8081)); s.close()" || exit 1
+
 CMD ["python", "-m", "orchestrator.worker"]
 
 # -----------------------------------------------------------------------------
@@ -97,6 +100,9 @@ USER appuser
 
 EXPOSE 8082
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import socket; s=socket.socket(); s.connect(('localhost', 8082)); s.close()" || exit 1
+
 CMD ["python", "-m", "policy.server"]
 
 # -----------------------------------------------------------------------------
@@ -111,6 +117,9 @@ COPY --from=builder /app /app
 USER appuser
 
 EXPOSE 8083
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import socket; s=socket.socket(); s.connect(('localhost', 8083)); s.close()" || exit 1
 
 CMD ["python", "-m", "memory.server"]
 

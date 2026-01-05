@@ -16,7 +16,7 @@ gateway:
 
   image:
     repository: ai-platform/gateway
-    tag: latest
+    tag: "0.1.0"
     pullPolicy: IfNotPresent
 
   service:
@@ -75,7 +75,7 @@ orchestrator:
 
   image:
     repository: ai-platform/orchestrator
-    tag: latest
+    tag: "0.1.0"
     pullPolicy: IfNotPresent
 
   resources:
@@ -106,7 +106,7 @@ policy:
 
   image:
     repository: ai-platform/policy
-    tag: latest
+    tag: "0.1.0"
     pullPolicy: IfNotPresent
 
   resources:
@@ -126,7 +126,7 @@ memory:
 
   image:
     repository: ai-platform/memory
-    tag: latest
+    tag: "0.1.0"
     pullPolicy: IfNotPresent
 
   resources:

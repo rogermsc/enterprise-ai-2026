@@ -45,14 +45,17 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Security middleware
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # Security middleware - explicit CORS configuration (no wildcards)
+    if settings.cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=settings.cors_origins,
+            allow_credentials=True,
+            allow_methods=settings.cors_allow_methods,
+            allow_headers=settings.cors_allow_headers,
+        )
+    else:
+        logger.warning("CORS not configured - set GOODAI_CORS_ORIGINS for cross-origin requests")
 
     # Custom middleware
     app.add_middleware(AuditMiddleware)

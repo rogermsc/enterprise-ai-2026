@@ -7,6 +7,9 @@ Implements:
 - Scope-based permissions
 """
 
+import hashlib
+import hmac
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Optional
 
@@ -23,6 +26,55 @@ logger = structlog.get_logger()
 # Security schemes
 api_key_header = APIKeyHeader(name=settings.api_key_header, auto_error=False)
 bearer_scheme = HTTPBearer(auto_error=False)
+
+# Valid API keys loaded from environment (comma-separated hashes)
+# In production, these should come from a secrets manager or database
+_API_KEY_HASHES: set[str] = set()
+
+
+def _load_api_key_hashes() -> set[str]:
+    """Load valid API key hashes from environment."""
+    global _API_KEY_HASHES
+    if not _API_KEY_HASHES:
+        # API keys should be stored as SHA256 hashes
+        # Set GOODAI_API_KEY_HASHES as comma-separated hash values
+        hash_str = os.environ.get("GOODAI_API_KEY_HASHES", "")
+        if hash_str:
+            _API_KEY_HASHES = set(h.strip() for h in hash_str.split(",") if h.strip())
+    return _API_KEY_HASHES
+
+
+def _hash_api_key(api_key: str) -> str:
+    """Hash an API key using SHA256."""
+    return hashlib.sha256(api_key.encode()).hexdigest()
+
+
+def validate_api_key(api_key: str) -> bool:
+    """Validate an API key against stored hashes.
+
+    Args:
+        api_key: The raw API key to validate
+
+    Returns:
+        True if the API key is valid, False otherwise
+    """
+    if not api_key or not api_key.startswith("gai_"):
+        return False
+
+    valid_hashes = _load_api_key_hashes()
+    if not valid_hashes:
+        # No API keys configured - reject all
+        logger.error("api_key_validation_failed", reason="No API key hashes configured")
+        return False
+
+    key_hash = _hash_api_key(api_key)
+
+    # Use constant-time comparison to prevent timing attacks
+    for valid_hash in valid_hashes:
+        if hmac.compare_digest(key_hash, valid_hash):
+            return True
+
+    return False
 
 
 class TokenPayload(BaseModel):
@@ -97,15 +149,15 @@ async def get_current_user(
     """
     # Try API key first
     if api_key:
-        # In production, validate against database/secrets manager
-        # This is a simplified example
-        if api_key.startswith("gai_"):
+        if validate_api_key(api_key):
+            logger.info("api_key_auth_success", key_prefix=api_key[:8])
             return AuthenticatedUser(
                 user_id="api_key_user",
                 org_id="default",
                 roles=["api_user"],
                 scopes=["agents:read", "agents:execute", "tasks:read", "tasks:write"],
             )
+        logger.warning("api_key_auth_failed", key_prefix=api_key[:8] if api_key else "none")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API key",

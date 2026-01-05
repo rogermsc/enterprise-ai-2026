@@ -76,14 +76,86 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     """Rate limiting middleware using sliding window algorithm.
 
     Limits requests per client IP within a configurable time window.
-    Uses in-memory storage (swap to Redis for distributed deployments).
+    Supports both in-memory (single instance) and Redis (distributed) backends.
     """
 
     def __init__(self, app, max_requests: int | None = None, window_seconds: int | None = None):
         super().__init__(app)
         self.max_requests = max_requests or settings.rate_limit_requests
         self.window_seconds = window_seconds or settings.rate_limit_window_seconds
-        self._requests: dict[str, list[float]] = {}
+        self._local_requests: dict[str, list[float]] = {}
+        self._redis_client = None
+        self._redis_available = False
+        self._init_redis()
+
+    def _init_redis(self) -> None:
+        """Initialize Redis client for distributed rate limiting."""
+        try:
+            import redis
+            redis_url = settings.redis_url
+            if redis_url:
+                self._redis_client = redis.from_url(redis_url, decode_responses=True)
+                # Test connection
+                self._redis_client.ping()
+                self._redis_available = True
+                logger.info("rate_limiter_redis_enabled", redis_url=redis_url[:20] + "...")
+        except ImportError:
+            logger.info("rate_limiter_using_memory", reason="redis package not installed")
+        except Exception as e:
+            logger.warning("rate_limiter_using_memory", reason=str(e))
+
+    async def _check_rate_limit_redis(self, client_ip: str) -> tuple[bool, int]:
+        """Check rate limit using Redis (distributed)."""
+        key = f"ratelimit:{client_ip}"
+        current_time = int(time.time())
+        window_start = current_time - self.window_seconds
+
+        try:
+            pipe = self._redis_client.pipeline()
+            # Remove old entries
+            pipe.zremrangebyscore(key, 0, window_start)
+            # Count current entries
+            pipe.zcard(key)
+            # Add current request
+            pipe.zadd(key, {str(current_time): current_time})
+            # Set expiry
+            pipe.expire(key, self.window_seconds)
+            results = pipe.execute()
+
+            request_count = results[1]  # zcard result
+            remaining = max(0, self.max_requests - request_count - 1)
+
+            if request_count >= self.max_requests:
+                return False, 0
+
+            return True, remaining
+        except Exception as e:
+            logger.warning("redis_rate_limit_error", error=str(e))
+            # Fall back to in-memory
+            return self._check_rate_limit_memory(client_ip)
+
+    def _check_rate_limit_memory(self, client_ip: str) -> tuple[bool, int]:
+        """Check rate limit using in-memory storage (single instance)."""
+        current_time = time.time()
+        window_start = current_time - self.window_seconds
+
+        if client_ip not in self._local_requests:
+            self._local_requests[client_ip] = []
+
+        # Remove old entries
+        self._local_requests[client_ip] = [
+            t for t in self._local_requests[client_ip] if t > window_start
+        ]
+
+        request_count = len(self._local_requests[client_ip])
+
+        if request_count >= self.max_requests:
+            return False, 0
+
+        self._local_requests[client_ip].append(current_time)
+        remaining = self.max_requests - request_count - 1
+
+        return True, remaining
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         # Skip rate limiting for health checks
@@ -91,24 +163,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         client_ip = request.client.host if request.client else "unknown"
-        current_time = time.time()
-
-        # Initialize or clean old requests
-        if client_ip not in self._requests:
-            self._requests[client_ip] = []
-
-        # Remove requests outside window
-        window_start = current_time - self.window_seconds
-        self._requests[client_ip] = [
-            t for t in self._requests[client_ip] if t > window_start
-        ]
 
         # Check rate limit
-        if len(self._requests[client_ip]) >= self.max_requests:
+        if self._redis_available:
+            allowed, remaining = await self._check_rate_limit_redis(client_ip)
+        else:
+            allowed, remaining = self._check_rate_limit_memory(client_ip)
+
+        if not allowed:
             logger.warning(
                 "rate_limit_exceeded",
                 client_ip=client_ip,
-                requests_in_window=len(self._requests[client_ip]),
+                backend="redis" if self._redis_available else "memory",
             )
             return Response(
                 content='{"error": "rate_limit_exceeded", "message": "Too many requests"}',
@@ -121,14 +187,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 },
             )
 
-        # Record request
-        self._requests[client_ip].append(current_time)
-
         # Process request
         response = await call_next(request)
 
         # Add rate limit headers
-        remaining = self.max_requests - len(self._requests[client_ip])
         response.headers["X-RateLimit-Limit"] = str(self.max_requests)
         response.headers["X-RateLimit-Remaining"] = str(remaining)
 

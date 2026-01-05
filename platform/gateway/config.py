@@ -33,10 +33,18 @@ class Settings(BaseSettings):
     jwt_algorithm: str = Field(default="HS256", description="JWT algorithm")
     jwt_expiry_hours: int = Field(default=24, description="JWT token expiry in hours")
 
-    # CORS
+    # CORS - No defaults in production; configure via GOODAI_CORS_ORIGINS
     cors_origins: List[str] = Field(
-        default=["http://localhost:3000", "http://localhost:8080"],
-        description="Allowed CORS origins",
+        default_factory=list,
+        description="Allowed CORS origins - REQUIRED for production, set via GOODAI_CORS_ORIGINS",
+    )
+    cors_allow_methods: List[str] = Field(
+        default=["GET", "POST", "PUT", "DELETE", "PATCH"],
+        description="Allowed CORS methods",
+    )
+    cors_allow_headers: List[str] = Field(
+        default=["Authorization", "Content-Type", "X-API-Key", "X-Request-ID"],
+        description="Allowed CORS headers",
     )
 
     # Rate Limiting
