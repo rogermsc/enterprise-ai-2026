@@ -84,6 +84,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.max_requests = max_requests or settings.rate_limit_requests
         self.window_seconds = window_seconds or settings.rate_limit_window_seconds
         self._local_requests: dict[str, list[float]] = {}
+        self._last_cleanup = time.time()
+        self._cleanup_interval = 300  # Cleanup stale entries every 5 minutes
         self._redis_client = None
         self._redis_available = False
         self._init_redis()
@@ -107,7 +109,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     async def _check_rate_limit_redis(self, client_ip: str) -> tuple[bool, int]:
         """Check rate limit using Redis (distributed)."""
         key = f"ratelimit:{client_ip}"
-        current_time = int(time.time())
+        current_time = time.time()
         window_start = current_time - self.window_seconds
 
         try:
@@ -116,8 +118,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             pipe.zremrangebyscore(key, 0, window_start)
             # Count current entries
             pipe.zcard(key)
-            # Add current request
-            pipe.zadd(key, {str(current_time): current_time})
+            # Add current request with unique member to avoid collisions within same second
+            member = f"{current_time}:{uuid.uuid4().hex[:8]}"
+            pipe.zadd(key, {member: current_time})
             # Set expiry
             pipe.expire(key, self.window_seconds)
             results = pipe.execute()
@@ -139,10 +142,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         current_time = time.time()
         window_start = current_time - self.window_seconds
 
+        # Periodic cleanup of stale entries to prevent memory leak
+        if current_time - self._last_cleanup > self._cleanup_interval:
+            self._cleanup_stale_entries(window_start)
+            self._last_cleanup = current_time
+
         if client_ip not in self._local_requests:
             self._local_requests[client_ip] = []
 
-        # Remove old entries
+        # Remove old entries for this IP
         self._local_requests[client_ip] = [
             t for t in self._local_requests[client_ip] if t > window_start
         ]
@@ -156,6 +164,17 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         remaining = self.max_requests - request_count - 1
 
         return True, remaining
+
+    def _cleanup_stale_entries(self, window_start: float) -> None:
+        """Remove IPs with no recent requests to prevent memory leak."""
+        stale_ips = [
+            ip for ip, timestamps in self._local_requests.items()
+            if not timestamps or all(t <= window_start for t in timestamps)
+        ]
+        for ip in stale_ips:
+            del self._local_requests[ip]
+        if stale_ips:
+            logger.debug("rate_limiter_cleanup", removed_ips=len(stale_ips))
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         # Skip rate limiting for health checks

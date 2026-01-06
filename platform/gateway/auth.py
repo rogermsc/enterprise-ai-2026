@@ -133,9 +133,11 @@ def decode_token(token: str) -> TokenPayload:
             detail="Token has expired",
         )
     except jwt.InvalidTokenError as e:
+        # Log the actual error but don't expose details to client
+        logger.warning("jwt_decode_failed", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid token: {str(e)}",
+            detail="Invalid token",
         )
 
 
