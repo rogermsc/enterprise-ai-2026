@@ -10,6 +10,7 @@ Implements:
 import hashlib
 import hmac
 import os
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Optional
 
@@ -30,17 +31,21 @@ bearer_scheme = HTTPBearer(auto_error=False)
 # Valid API keys loaded from environment (comma-separated hashes)
 # In production, these should come from a secrets manager or database
 _API_KEY_HASHES: set[str] = set()
+_api_key_lock = threading.Lock()
 
 
 def _load_api_key_hashes() -> set[str]:
-    """Load valid API key hashes from environment."""
+    """Load valid API key hashes from environment (thread-safe)."""
     global _API_KEY_HASHES
     if not _API_KEY_HASHES:
-        # API keys should be stored as SHA256 hashes
-        # Set GOODAI_API_KEY_HASHES as comma-separated hash values
-        hash_str = os.environ.get("GOODAI_API_KEY_HASHES", "")
-        if hash_str:
-            _API_KEY_HASHES = set(h.strip() for h in hash_str.split(",") if h.strip())
+        with _api_key_lock:
+            # Double-check after acquiring lock
+            if not _API_KEY_HASHES:
+                # API keys should be stored as SHA256 hashes
+                # Set GOODAI_API_KEY_HASHES as comma-separated hash values
+                hash_str = os.environ.get("GOODAI_API_KEY_HASHES", "")
+                if hash_str:
+                    _API_KEY_HASHES = set(h.strip() for h in hash_str.split(",") if h.strip())
     return _API_KEY_HASHES
 
 

@@ -51,7 +51,7 @@ class MemoryStore:
         if self._client is None:
             try:
                 import redis.asyncio as redis
-                self._client = redis.from_url(self._redis_url)
+                self._client = redis.from_url(self._redis_url, decode_responses=True)
             except ImportError:
                 logger.warning("Redis not available, using local cache")
         return self._client
@@ -107,16 +107,22 @@ class MemoryStore:
             )
             entries = []
             for entry_id in entry_ids:
-                data = await client.get(f"memory:{session_id}:{entry_id.decode()}")
+                # With decode_responses=True, entry_id is already a string
+                data = await client.get(f"memory:{session_id}:{entry_id}")
                 if data:
-                    parsed = json.loads(data)
+                    try:
+                        parsed = json.loads(data)
+                        created_at = datetime.fromisoformat(parsed["created_at"])
+                    except (json.JSONDecodeError, ValueError, KeyError) as e:
+                        logger.warning("memory_entry_parse_error", entry_id=entry_id, error=str(e))
+                        continue
                     entries.append(MemoryEntry(
                         id=parsed["id"],
                         session_id=parsed["session_id"],
                         content=parsed["content"],
                         role=parsed["role"],
                         metadata=parsed.get("metadata", {}),
-                        created_at=datetime.fromisoformat(parsed["created_at"]),
+                        created_at=created_at,
                     ))
             return entries
 
@@ -135,7 +141,8 @@ class MemoryStore:
         if client:
             entry_ids = await client.lrange(f"memory:session:{session_id}", 0, -1)
             for entry_id in entry_ids:
-                await client.delete(f"memory:{session_id}:{entry_id.decode()}")
+                # With decode_responses=True, entry_id is already a string
+                await client.delete(f"memory:{session_id}:{entry_id}")
             await client.delete(f"memory:session:{session_id}")
 
     async def summarize_session(self, session_id: str) -> Optional[str]:

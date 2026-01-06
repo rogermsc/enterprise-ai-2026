@@ -93,12 +93,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     def _init_redis(self) -> None:
         """Initialize Redis client for distributed rate limiting."""
         try:
-            import redis
+            import redis.asyncio as aioredis
             redis_url = settings.redis_url
             if redis_url:
-                self._redis_client = redis.from_url(redis_url, decode_responses=True)
-                # Test connection
-                self._redis_client.ping()
+                self._redis_client = aioredis.from_url(redis_url, decode_responses=True)
                 self._redis_available = True
                 logger.info("rate_limiter_redis_enabled", redis_url=redis_url[:20] + "...")
         except ImportError:
@@ -113,17 +111,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         window_start = current_time - self.window_seconds
 
         try:
-            pipe = self._redis_client.pipeline()
-            # Remove old entries
-            pipe.zremrangebyscore(key, 0, window_start)
-            # Count current entries
-            pipe.zcard(key)
-            # Add current request with unique member to avoid collisions within same second
-            member = f"{current_time}:{uuid.uuid4().hex[:8]}"
-            pipe.zadd(key, {member: current_time})
-            # Set expiry
-            pipe.expire(key, self.window_seconds)
-            results = pipe.execute()
+            # Use async pipeline
+            async with self._redis_client.pipeline() as pipe:
+                # Remove old entries
+                await pipe.zremrangebyscore(key, 0, window_start)
+                # Count current entries
+                await pipe.zcard(key)
+                # Add current request with unique member to avoid collisions within same second
+                member = f"{current_time}:{uuid.uuid4().hex[:8]}"
+                await pipe.zadd(key, {member: current_time})
+                # Set expiry
+                await pipe.expire(key, self.window_seconds)
+                results = await pipe.execute()
 
             request_count = results[1]  # zcard result
             remaining = max(0, self.max_requests - request_count - 1)
